@@ -30,7 +30,7 @@ class CactusManager: ObservableObject {
         private var currentTemperature = 0.8   // Slightly higher for more creative responses
         private var currentTopK = 40
         private var currentTopP = 0.9
-        private var currentMaxTokens = 256     // Reduced to avoid long code generation
+        private var currentMaxTokens = 512     // Increased for more detailed responses
         private var currentThreads = 4
     
     private var cactusContext: cactus_context_handle_t?
@@ -45,14 +45,15 @@ class CactusManager: ObservableObject {
     private func setupAvailableModels() {
         // Add some example models - in a real app, these would be discovered from the model directory
         availableModels = [
-            "Gemma3-270M"
+            "Gemma3-1B",
+            "Qwen2.5-1.5B-Instruct"
         ]
     }
     
     private func addWelcomeMessage() {
         let welcomeMessage = ChatMessage(
             id: UUID(),
-            text: "Welcome to Cactus AI Demo! 🎉\n\nThis app demonstrates on-device AI using the Cactus framework with Google's Gemma 3 270M Instruct model (Q4_K_M quantized). You can:\n\n• Chat with Gemma 3 completely offline\n• Experience private, local AI processing\n• Get high-quality responses with the latest AI technology\n\nTap the gear icon to configure settings, then start chatting!",
+            text: "Welcome to Magma AI! 🔥\n\nTap the gear icon to select a model and configure settings, then start chatting!",
             isUser: false,
             timestamp: Date()
         )
@@ -65,13 +66,14 @@ class CactusManager: ObservableObject {
 
         print("Initializing Cactus framework...")
         
-        // Check if Gemma 3 270M model exists in the app bundle
-        if let modelPath = Bundle.main.path(forResource: "gemma-3-270m-it-Q4_K_M", ofType: "gguf") {
-            print("Found Gemma 3 270M model at: \(modelPath)")
-            loadModel("Gemma3-270M")
+        // Try to load the first available model
+        if !availableModels.isEmpty {
+            let firstModel = availableModels.first!
+            print("Loading first available model: \(firstModel)")
+            loadModel(firstModel)
         } else {
-            print("No gemma-3-270m-it-Q4_K_M.gguf found in app bundle")
-            addSystemMessage("No Gemma 3 270M model file found. Please add the gemma-3-270m-it-Q4_K_M.gguf file to the app bundle.")
+            print("No models available in app bundle")
+            addSystemMessage("No model files found. Please add model files to the app bundle.")
         }
     }
     
@@ -150,8 +152,8 @@ class CactusManager: ObservableObject {
         let userMessage = ChatMessage(id: UUID(), text: message, isUser: true, timestamp: Date())
         addMessage(userMessage)
         
-        // Format the prompt for Gemma 3 using the conversation history
-        let formattedPrompt = formatPromptForGemma3(history: history, newUserMessage: message)
+        // Format the prompt based on the current model
+        let formattedPrompt = formatPromptForModel(history: history, newUserMessage: message, modelName: currentModelName)
         
         // Debug: Print the prompt being sent to the model
         print("🔍 Sending prompt to model:")
@@ -190,7 +192,8 @@ class CactusManager: ObservableObject {
                 completionParams.grammar = nil
                 completionParams.token_callback = nil
                 
-                var stopSequence = "<end_of_turn>"
+                // Use appropriate stop sequence based on model
+                let stopSequence = self.currentModelName.hasPrefix("Qwen") ? "<|im_end|>" : "<end_of_turn>"
                 stopSequence.withCString { stopCStr in
                     var stopSequences: [UnsafePointer<CChar>?] = [stopCStr]
                     stopSequences.withUnsafeMutableBufferPointer { bufferPointer in
@@ -217,11 +220,12 @@ class CactusManager: ObservableObject {
                             
                                                     if status == 0 && result.text != nil {
                             let rawResponse = String(cString: result.text)
-                            print("🔍 Raw model response:\n\(rawResponse)\n🔍 End of response")
+                            print("🔍 Raw model response (\(rawResponse.count) chars):\n\(rawResponse)\n🔍 End of response")
                             
-                            // Clean the response: remove <end_of_turn> and trim whitespace
+                            // Clean the response: remove stop sequences and trim whitespace
                             var cleanedResponse = rawResponse
                                 .replacingOccurrences(of: "<end_of_turn>", with: "")
+                                .replacingOccurrences(of: "<|im_end|>", with: "")
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
                             
                             // Remove common artifacts at the beginning of responses
@@ -241,6 +245,7 @@ class CactusManager: ObservableObject {
                                 cleanedResponse = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
                             }
                             
+                            print("🔍 Cleaned response (\(cleanedResponse.count) chars):\n\(cleanedResponse)\n🔍 End cleaned response")
                             let aiMessage = ChatMessage(id: UUID(), text: cleanedResponse, isUser: false, timestamp: Date())
                             self.addMessage(aiMessage)
                             cactus_free_completion_result_members_c(&result)
@@ -276,8 +281,13 @@ class CactusManager: ObservableObject {
     }
     
     func clearMessages() {
-        messages.removeAll()
-        addWelcomeMessage()
+        print("🧹 clearMessages() called - current message count: \(messages.count)")
+        DispatchQueue.main.async {
+            self.messages.removeAll()
+            print("🧹 Messages cleared - new count: \(self.messages.count)")
+            self.addWelcomeMessage()
+            print("🧹 Welcome message added - final count: \(self.messages.count)")
+        }
     }
     
     func updateSettings(
@@ -309,6 +319,46 @@ class CactusManager: ObservableObject {
             timestamp: Date()
         )
         messages.append(systemMessage)
+    }
+    
+    // Format prompt based on the model type
+    private func formatPromptForModel(history: [ChatMessage], newUserMessage: String, modelName: String) -> String {
+        if modelName.hasPrefix("Qwen") {
+            return formatPromptForQwen(history: history, newUserMessage: newUserMessage)
+        } else {
+            return formatPromptForGemma3(history: history, newUserMessage: newUserMessage)
+        }
+    }
+    
+    // Format prompt for Qwen models
+    private func formatPromptForQwen(history: [ChatMessage], newUserMessage: String) -> String {
+        var prompt = ""
+        let systemPrompt = "You are a helpful AI assistant. Provide clear, accurate, and informative responses."
+        
+        // Add system message
+        prompt += "<|im_start|>system\n\(systemPrompt)<|im_end|>\n"
+        
+        // Add the chat history
+        for message in history {
+            // Filter out non-chat messages
+            if message.text.contains("Welcome to Cactus AI Demo!") || 
+               message.text.contains("Settings updated") || 
+               message.text.contains("Model loaded") {
+                continue
+            }
+            
+            if message.isUser {
+                prompt += "<|im_start|>user\n\(message.text)<|im_end|>\n"
+            } else {
+                prompt += "<|im_start|>assistant\n\(message.text)<|im_end|>\n"
+            }
+        }
+        
+        // Add the new user message
+        prompt += "<|im_start|>user\n\(newUserMessage)<|im_end|>\n"
+        prompt += "<|im_start|>assistant\n"
+        
+        return prompt
     }
     
     // Format prompt for Gemma 3 Instruct model
@@ -349,10 +399,12 @@ class CactusManager: ObservableObject {
     }
     
     private func getModelPath(_ modelName: String) -> String? {
-        // Handle the display name "Gemma3-270M" by mapping to the actual file
+        // Handle the display names by mapping to the actual files
         let actualFileName: String
-        if modelName == "Gemma3-270M" {
-            actualFileName = "gemma-3-270m-it-Q4_K_M.gguf"
+        if modelName == "Gemma3-1B" {
+            actualFileName = "gemma-3-1b-it-q4_k_m.gguf"
+        } else if modelName == "Qwen2.5-1.5B-Instruct" {
+            actualFileName = "qwen2.5-1.5b-instruct-q8_0.gguf"
         } else {
             actualFileName = modelName
         }
