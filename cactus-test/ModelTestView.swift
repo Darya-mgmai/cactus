@@ -11,6 +11,11 @@ struct ModelTestView: View {
     @State private var testResults: [String] = []
     @State private var isLoading = false
     
+    // Adaptive color that works across iOS versions
+    private var adaptiveBlue: Color {
+        Color(UIColor.systemBlue)
+    }
+    
     var body: some View {
         NavigationView {
             VStack {
@@ -22,7 +27,7 @@ struct ModelTestView: View {
                     testModelLoading()
                 }
                 .padding()
-                .background(Color.blue)
+                .background(adaptiveBlue)
                 .foregroundColor(.white)
                 .cornerRadius(8)
                 .disabled(isLoading)

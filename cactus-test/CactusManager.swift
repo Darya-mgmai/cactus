@@ -45,8 +45,8 @@ class CactusManager: ObservableObject {
     private func setupAvailableModels() {
         // Add some example models - in a real app, these would be discovered from the model directory
         availableModels = [
-            "Gemma3-1B",
-            "Qwen2.5-1.5B-Instruct"
+            "Model 1",
+            "Model 2"
         ]
     }
     
@@ -78,11 +78,7 @@ class CactusManager: ObservableObject {
     }
     
     func loadModel(_ modelName: String) {
-        // Prevent reloading if model is already loaded and working
-        if isModelLoaded && cactusContext != nil && currentModelName == modelName {
-            print("Model \(modelName) is already loaded and working. Skipping reload.")
-            return
-        }
+        print("Loading model: \(modelName) (will reload even if already loaded to apply new system prompt)")
         
         guard let modelPath = getModelPath(modelName) else {
             addSystemMessage("Model file not found: \(modelName)")
@@ -157,6 +153,7 @@ class CactusManager: ObservableObject {
         
         // Debug: Print the prompt being sent to the model
         print("🔍 Sending prompt to model:")
+        print("Current model name: \(currentModelName)")
         print("Length: \(formattedPrompt.count) characters")
         print("=== PROMPT START ===")
         print(formattedPrompt)
@@ -323,17 +320,19 @@ class CactusManager: ObservableObject {
     
     // Format prompt based on the model type
     private func formatPromptForModel(history: [ChatMessage], newUserMessage: String, modelName: String) -> String {
-        if modelName.hasPrefix("Qwen") {
-            return formatPromptForQwen(history: history, newUserMessage: newUserMessage)
+        if modelName == "Model 2" {
+            // Model 2 is Qwen2.5-1.5B-Instruct
+            return formatPromptForQwen(history: history, newUserMessage: newUserMessage, modelName: modelName)
         } else {
-            return formatPromptForGemma3(history: history, newUserMessage: newUserMessage)
+            // Model 1 is Gemma3-1B
+            return formatPromptForGemma3(history: history, newUserMessage: newUserMessage, modelName: modelName)
         }
     }
     
     // Format prompt for Qwen models
-    private func formatPromptForQwen(history: [ChatMessage], newUserMessage: String) -> String {
+    private func formatPromptForQwen(history: [ChatMessage], newUserMessage: String, modelName: String) -> String {
         var prompt = ""
-        let systemPrompt = "You are a helpful AI assistant. Provide clear, accurate, and informative responses."
+        let systemPrompt = "You are \(modelName), a helpful AI assistant. If someone asks for your name, respond that you are \(modelName). Provide clear, accurate, and informative responses."
         
         // Add system message
         prompt += "<|im_start|>system\n\(systemPrompt)<|im_end|>\n"
@@ -341,7 +340,7 @@ class CactusManager: ObservableObject {
         // Add the chat history
         for message in history {
             // Filter out non-chat messages
-            if message.text.contains("Welcome to Cactus AI Demo!") || 
+            if message.text.contains("Welcome to Magma AI!") || 
                message.text.contains("Settings updated") || 
                message.text.contains("Model loaded") {
                 continue
@@ -362,14 +361,14 @@ class CactusManager: ObservableObject {
     }
     
     // Format prompt for Gemma 3 Instruct model
-    private func formatPromptForGemma3(history: [ChatMessage], newUserMessage: String) -> String {
+    private func formatPromptForGemma3(history: [ChatMessage], newUserMessage: String, modelName: String) -> String {
         var prompt = ""
-        let systemPrompt = "You are a knowledgeable AI assistant. When users ask questions, provide specific, detailed, and informative answers. Do not ask follow-up questions or say 'I'm ready for questions' - just answer directly with facts and information. Always respond in English with concrete details."
+        let systemPrompt = "You are \(modelName), a knowledgeable AI assistant. If someone asks for your name, respond that you are \(modelName). When users ask questions, provide specific, detailed, and informative answers. Do not ask follow-up questions or say 'I'm ready for questions' - just answer directly with facts and information. Always respond in English with concrete details."
 
         // Add the chat history to the prompt
         for message in history {
             // Filter out non-chat messages and generic/repeated responses
-            if message.text.contains("Welcome to Cactus AI Demo!") || 
+            if message.text.contains("Welcome to Magma AI!") || 
                message.text.contains("Settings updated") || 
                message.text.contains("Model loaded") ||
                message.text.contains("Okay, I'm ready for your question!") ||
@@ -401,9 +400,9 @@ class CactusManager: ObservableObject {
     private func getModelPath(_ modelName: String) -> String? {
         // Handle the display names by mapping to the actual files
         let actualFileName: String
-        if modelName == "Gemma3-1B" {
+        if modelName == "Model 1" {
             actualFileName = "gemma-3-1b-it-q4_k_m.gguf"
-        } else if modelName == "Qwen2.5-1.5B-Instruct" {
+        } else if modelName == "Model 2" {
             actualFileName = "qwen2.5-1.5b-instruct-q8_0.gguf"
         } else {
             actualFileName = modelName

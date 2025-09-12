@@ -13,6 +13,11 @@ struct ContentView: View {
     @State private var showingModelPicker = false
     @State private var showingSettings = false
     
+    // Adaptive color that works across iOS versions
+    private var adaptiveBlue: Color {
+        Color(UIColor.systemBlue)
+    }
+    
     var body: some View {
         TabView {
             chatView
@@ -36,7 +41,7 @@ struct ContentView: View {
                 VStack {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("Cactus AI Demo")
+                            Text("Magma AI")
                                 .font(.title2)
                                 .fontWeight(.bold)
                             Text(cactusManager.currentModelName)
@@ -49,14 +54,14 @@ struct ContentView: View {
                                 showingSettings = true
                             }) {
                                 Image(systemName: "slider.horizontal.3")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(adaptiveBlue)
                             }
                             
                             Button(action: {
                                 showingModelPicker = true
                             }) {
                                 Image(systemName: "gear")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(adaptiveBlue)
                             }
                         }
                     }
@@ -110,7 +115,7 @@ struct ContentView: View {
                         Button(action: sendMessage) {
                             Image(systemName: cactusManager.isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
                                 .font(.title2)
-                                .foregroundColor(cactusManager.isGenerating ? .red : .blue)
+                                .foregroundColor(cactusManager.isGenerating ? .red : adaptiveBlue)
                         }
                         .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || cactusManager.isGenerating)
                     }
@@ -163,6 +168,11 @@ struct ContentView: View {
 struct MessageView: View {
     let message: ChatMessage
     
+    // Adaptive color that works across iOS versions
+    private var adaptiveBlue: Color {
+        Color(UIColor.systemBlue)
+    }
+    
     var body: some View {
         HStack {
             if message.isUser {
@@ -170,7 +180,7 @@ struct MessageView: View {
                 VStack(alignment: .trailing) {
                     Text(message.text)
                         .padding()
-                        .background(Color.blue)
+                        .background(adaptiveBlue)
                         .foregroundColor(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     Text(message.timestamp, style: .time)
@@ -198,6 +208,11 @@ struct ModelPickerView: View {
     @ObservedObject var cactusManager: CactusManager
     @Environment(\.dismiss) private var dismiss
     
+    // Adaptive color that works across iOS versions
+    private var adaptiveBlue: Color {
+        Color(UIColor.systemBlue)
+    }
+    
     var body: some View {
         NavigationView {
             List {
@@ -214,7 +229,7 @@ struct ModelPickerView: View {
                             Spacer()
                             if cactusManager.currentModelName == model {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(adaptiveBlue)
                             }
                         }
                         .contentShape(Rectangle())
