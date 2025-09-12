@@ -105,7 +105,7 @@ struct SettingsView: View {
                             cactusManager.loadModel(cactusManager.currentModelName)
                         }
                     }
-                    .disabled(!cactusManager.isModelLoaded)
+                    .disabled(cactusManager.isGenerating)
                     
                     Button("Clear Chat History") {
                         cactusManager.clearMessages()

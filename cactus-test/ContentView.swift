@@ -41,7 +41,7 @@ struct ContentView: View {
                 VStack {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("Magma AI")
+                            Text("WV Expert Agent")
                                 .font(.title2)
                                 .fontWeight(.bold)
                             Text(cactusManager.currentModelName)
@@ -124,7 +124,7 @@ struct ContentView: View {
                         HStack {
                             ProgressView()
                                 .scaleEffect(0.8)
-                            Text("Generating response...")
+                            Text("...")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Spacer()

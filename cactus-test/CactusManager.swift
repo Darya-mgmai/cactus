@@ -1,3 +1,4 @@
+
 //
 //  CactusManager.swift
 //  cactus-test
@@ -53,7 +54,7 @@ class CactusManager: ObservableObject {
     private func addWelcomeMessage() {
         let welcomeMessage = ChatMessage(
             id: UUID(),
-            text: "Welcome to Magma AI! 🔥\n\nTap the gear icon to select a model and configure settings, then start chatting!",
+            text: "Welcome to WV Expert Agent! 🤖\n\nTap the gear icon to select a model and configure settings, then start chatting!",
             isUser: false,
             timestamp: Date()
         )
@@ -78,7 +79,11 @@ class CactusManager: ObservableObject {
     }
     
     func loadModel(_ modelName: String) {
-        print("Loading model: \(modelName) (will reload even if already loaded to apply new system prompt)")
+        print("🔄 FORCE RELOADING MODEL: \(modelName) - This will apply the new 'WV Expert Agent' system prompt")
+        
+        // Always set to false first to ensure we reload
+        isModelLoaded = false
+        currentModelName = modelName
         
         guard let modelPath = getModelPath(modelName) else {
             addSystemMessage("Model file not found: \(modelName)")
@@ -243,6 +248,13 @@ class CactusManager: ObservableObject {
                             }
                             
                             print("🔍 Cleaned response (\(cleanedResponse.count) chars):\n\(cleanedResponse)\n🔍 End cleaned response")
+                            
+                            // Post-process response for identity questions
+                            if message.lowercased().contains("what is your name") || message.lowercased().contains("who are you") {
+                                cleanedResponse = "I am WV Expert Agent, a helpful AI assistant."
+                                print("🎯 Overrode response for name question: \(cleanedResponse)")
+                            }
+                            
                             let aiMessage = ChatMessage(id: UUID(), text: cleanedResponse, isUser: false, timestamp: Date())
                             self.addMessage(aiMessage)
                             cactus_free_completion_result_members_c(&result)
@@ -332,7 +344,8 @@ class CactusManager: ObservableObject {
     // Format prompt for Qwen models
     private func formatPromptForQwen(history: [ChatMessage], newUserMessage: String, modelName: String) -> String {
         var prompt = ""
-        let systemPrompt = "You are \(modelName), a helpful AI assistant. If someone asks for your name, respond that you are \(modelName). Provide clear, accurate, and informative responses."
+        let systemPrompt = "You are WV Expert Agent, a helpful AI assistant. If someone asks for your name, respond that you are WV Expert Agent. Provide clear, accurate, and informative responses."
+        print("🤖 Using Qwen system prompt: WV Expert Agent")
         
         // Add system message
         prompt += "<|im_start|>system\n\(systemPrompt)<|im_end|>\n"
@@ -340,7 +353,7 @@ class CactusManager: ObservableObject {
         // Add the chat history
         for message in history {
             // Filter out non-chat messages
-            if message.text.contains("Welcome to Magma AI!") || 
+            if message.text.contains("Welcome to WV Expert Agent!") || 
                message.text.contains("Settings updated") || 
                message.text.contains("Model loaded") {
                 continue
@@ -353,9 +366,14 @@ class CactusManager: ObservableObject {
             }
         }
         
-        // Add the new user message
-        prompt += "<|im_start|>user\n\(newUserMessage)<|im_end|>\n"
-        prompt += "<|im_start|>assistant\n"
+        // Add the new user message with identity check
+        if newUserMessage.lowercased().contains("what is your name") || newUserMessage.lowercased().contains("who are you") {
+            prompt += "<|im_start|>user\n\(newUserMessage)<|im_end|>\n"
+            prompt += "<|im_start|>assistant\nI am WV Expert Agent"
+        } else {
+            prompt += "<|im_start|>user\n\(newUserMessage)<|im_end|>\n"
+            prompt += "<|im_start|>assistant\n"
+        }
         
         return prompt
     }
@@ -363,12 +381,13 @@ class CactusManager: ObservableObject {
     // Format prompt for Gemma 3 Instruct model
     private func formatPromptForGemma3(history: [ChatMessage], newUserMessage: String, modelName: String) -> String {
         var prompt = ""
-        let systemPrompt = "You are \(modelName), a knowledgeable AI assistant. If someone asks for your name, respond that you are \(modelName). When users ask questions, provide specific, detailed, and informative answers. Do not ask follow-up questions or say 'I'm ready for questions' - just answer directly with facts and information. Always respond in English with concrete details."
+        let systemPrompt = "You are WV Expert Agent, a knowledgeable AI assistant. If someone asks for your name, respond that you are WV Expert Agent. When users ask questions, provide specific, detailed, and informative answers. Do not ask follow-up questions or say 'I'm ready for questions' - just answer directly with facts and information. Always respond in English with concrete details."
+        print("🤖 Using Gemma3 system prompt: WV Expert Agent")
 
         // Add the chat history to the prompt
         for message in history {
             // Filter out non-chat messages and generic/repeated responses
-            if message.text.contains("Welcome to Magma AI!") || 
+            if message.text.contains("Welcome to WV Expert Agent!") || 
                message.text.contains("Settings updated") || 
                message.text.contains("Model loaded") ||
                message.text.contains("Okay, I'm ready for your question!") ||
@@ -391,8 +410,12 @@ class CactusManager: ObservableObject {
             prompt += "<start_of_turn>user\n\(newUserMessage)<end_of_turn>\n"
         }
         
-        // Signal for the model to start its response
-        prompt += "<start_of_turn>model\n"
+        // Signal for the model to start its response with identity check
+        if newUserMessage.lowercased().contains("what is your name") || newUserMessage.lowercased().contains("who are you") {
+            prompt += "<start_of_turn>model\nI am WV Expert Agent"
+        } else {
+            prompt += "<start_of_turn>model\n"
+        }
         
         return prompt
     }
