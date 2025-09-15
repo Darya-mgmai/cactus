@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var cactusManager = CactusManager()
+    // @StateObject private var speechManager = SpeechManager()  // Temporarily disabled
     @State private var inputText = ""
     @State private var showingModelPicker = false
     @State private var showingSettings = false
@@ -112,6 +113,14 @@ struct ContentView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .disabled(cactusManager.isGenerating)
                         
+                        // Microphone button for speech-to-text (DISABLED)
+                        // Button(action: toggleRecording) {
+                        //     Image(systemName: speechManager.isRecording ? "mic.fill" : "mic")
+                        //         .font(.title2)
+                        //         .foregroundColor(speechManager.isRecording ? .red : adaptiveBlue)
+                        // }
+                        // .disabled(cactusManager.isGenerating || !speechManager.hasPermission)
+                        
                         Button(action: sendMessage) {
                             Image(systemName: cactusManager.isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
                                 .font(.title2)
@@ -130,6 +139,19 @@ struct ContentView: View {
                             Spacer()
                         }
                     }
+                    
+                    // Recording indicator (DISABLED)
+                    // if speechManager.isRecording {
+                    //     HStack {
+                    //         Image(systemName: "waveform")
+                    //             .foregroundColor(.red)
+                    //         Text("Listening... \(speechManager.recordingText)")
+                    //             .font(.caption)
+                    //             .foregroundColor(.secondary)
+                    //             .lineLimit(2)
+                    //         Spacer()
+                    //     }
+                    // }
                 }
                 .padding()
                 .background(Color(.systemBackground))
@@ -144,6 +166,16 @@ struct ContentView: View {
         }
         .task {
             cactusManager.initializeCactus()
+            
+            // Set up automatic TTS for AI responses (DISABLED)
+            // cactusManager.onAIMessageAdded = { responseText in
+            //     // Only speak if it's not a system message and permissions are granted
+            //     if speechManager.hasPermission && 
+            //        !responseText.contains("❌") && !responseText.contains("🛑") && !responseText.contains("Settings updated") {
+            //         // speechManager.speak(responseText) // Temporarily disabled
+            //         print("🔊 Would speak: \(responseText.prefix(50))...")
+            //     }
+            // }
         }
     }
     
@@ -163,10 +195,25 @@ struct ContentView: View {
             }
         }
     }
+    
+    // MARK: - Speech Functions (DISABLED)
+    // private func toggleRecording() {
+    //     if speechManager.isRecording {
+    //         speechManager.stopRecording()
+    //         // Use the recorded text as input
+    //         if !speechManager.recordingText.isEmpty {
+    //             inputText = speechManager.recordingText
+    //         }
+    //     } else {
+    //         // Clear any existing text and start recording
+    //         speechManager.startRecording()
+    //     }
+    // }
 }
 
 struct MessageView: View {
     let message: ChatMessage
+    // @ObservedObject var speechManager: SpeechManager  // Temporarily disabled
     
     // Adaptive color that works across iOS versions
     private var adaptiveBlue: Color {
@@ -189,11 +236,28 @@ struct MessageView: View {
                 }
             } else {
                 VStack(alignment: .leading) {
-                    Text(message.text)
-                        .padding()
-                        .background(Color(.systemGray5))
-                        .foregroundColor(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    HStack {
+                        Text(message.text)
+                            .padding()
+                            .background(Color(.systemGray5))
+                            .foregroundColor(.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        
+                        // Speaker button for AI messages (DISABLED)
+                        // Button(action: {
+                        //     if speechManager.isPlaying {
+                        //         speechManager.stopSpeaking()
+                        //     } else {
+                        //         speechManager.speak(message.text)
+                        //     }
+                        // }) {
+                        //     Image(systemName: speechManager.isPlaying ? "speaker.slash.fill" : "speaker.2.fill")
+                        //         .font(.caption)
+                        //         .foregroundColor(adaptiveBlue)
+                        // }
+                        // .padding(.leading, 4)
+                    }
+                    
                     Text(message.timestamp, style: .time)
                         .font(.caption2)
                         .foregroundColor(.secondary)

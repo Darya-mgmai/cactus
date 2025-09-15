@@ -26,8 +26,11 @@ class CactusManager: ObservableObject {
     @Published var contextSize = "Unknown"
     @Published var modelParameters = "Unknown"
     
-            // Settings
-        private var currentContextSize = 4096  // Increased for Gemma 3
+    // Optional callback for when AI messages are added (for TTS)
+    var onAIMessageAdded: ((String) -> Void)?
+    
+            // Settings - Reduced context size to prevent crashes
+        private var currentContextSize = 2048  // Reduced from 4096 to prevent memory issues
         private var currentTemperature = 0.8   // Slightly higher for more creative responses
         private var currentTopK = 40
         private var currentTopP = 0.9
@@ -67,6 +70,13 @@ class CactusManager: ObservableObject {
 
         print("Initializing Cactus framework...")
         
+        // TEMPORARILY DISABLE AUTOMATIC MODEL LOADING TO PREVENT CRASHES
+        // Users will need to manually load models from Settings
+        print("⚠️ Automatic model loading disabled - please load model manually from Settings")
+        addSystemMessage("⚠️ Please tap the gear icon and select 'Load Selected Model' to start using AI features.")
+        
+        // Keep this code commented for now:
+        /*
         // Try to load the first available model
         if !availableModels.isEmpty {
             let firstModel = availableModels.first!
@@ -76,6 +86,7 @@ class CactusManager: ObservableObject {
             print("No models available in app bundle")
             addSystemMessage("No model files found. Please add model files to the app bundle.")
         }
+        */
     }
     
     func loadModel(_ modelName: String) {
@@ -85,21 +96,39 @@ class CactusManager: ObservableObject {
         isModelLoaded = false
         currentModelName = modelName
         
+        // Clean up existing context first
+        if let existingContext = cactusContext {
+            print("🧹 Cleaning up existing context...")
+            cactus_free_context_c(existingContext)
+            cactusContext = nil
+        }
+        
         guard let modelPath = getModelPath(modelName) else {
-            addSystemMessage("Model file not found: \(modelName)")
+            addSystemMessage("❌ Model file not found: \(modelName)")
+            print("❌ Model path not found for: \(modelName)")
+            return
+        }
+        
+        print("📁 Model path: \(modelPath)")
+        
+        // Check if file actually exists
+        guard FileManager.default.fileExists(atPath: modelPath) else {
+            addSystemMessage("❌ Model file does not exist at path: \(modelPath)")
+            print("❌ File does not exist at: \(modelPath)")
             return
         }
         
         addSystemMessage("Loading model: \(modelName)...")
         
+        // Wrap model loading in a safe block to prevent crashes
         // Create initialization parameters and ensure proper string handling
         modelPath.withCString { modelPathCStr in
             var initParams = cactus_init_params_c_t()
             initParams.model_path = modelPathCStr
             initParams.chat_template = nil // Use default
         initParams.n_ctx = Int32(currentContextSize)
-        initParams.n_batch = 512
-        initParams.n_ubatch = 512
+        initParams.n_batch = 256  // Reduced from 512 to prevent memory issues
+        initParams.n_ubatch = 256  // Reduced from 512 to prevent memory issues
         initParams.n_gpu_layers = 0 // CPU only for demo
         initParams.n_threads = Int32(currentThreads)
         initParams.use_mmap = true
@@ -114,8 +143,22 @@ class CactusManager: ObservableObject {
             print("Loading progress: \(progress * 100)%")
         }
         
-            // Initialize context
+            // Initialize context with error handling
+            print("🚀 Attempting to initialize Cactus context...")
+            print("📊 Parameters: ctx=\(initParams.n_ctx), batch=\(initParams.n_batch), threads=\(initParams.n_threads)")
+            
+            // Try to initialize context
             cactusContext = cactus_init_context_c(&initParams)
+            
+            if cactusContext != nil {
+                print("✅ Cactus context created successfully!")
+            } else {
+                print("❌ Failed to create Cactus context - this could be due to:")
+                print("   • Model file corruption")
+                print("   • Insufficient memory")
+                print("   • Unsupported model format")
+                print("   • Context size too large")
+            }
             
             if cactusContext != nil {
                 DispatchQueue.main.async {
@@ -236,6 +279,38 @@ class CactusManager: ObservableObject {
                             // Additional cleaning for common artifacts
                             cleanedResponse = cleanedResponse.replacingOccurrences(of: "^\\s*[!*]+\\s*", with: "", options: .regularExpression)
                             
+                            // Remove repetitive garbled text patterns (like "ieuxieuxieux...")
+                            // First, try to detect where repetitive garbage starts
+                            let lines = cleanedResponse.components(separatedBy: .newlines)
+                            var cleanLines: [String] = []
+                            var foundGarbage = false
+                            
+                            for line in lines {
+                                let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                                
+                                // Check if this line is repetitive garbage
+                                if trimmedLine == "ieux" || trimmedLine.hasPrefix("ieux") && trimmedLine.count < 10 {
+                                    foundGarbage = true
+                                    break
+                                }
+                                
+                                // Check for other repetitive patterns
+                                if trimmedLine.count > 0 && trimmedLine.count < 20 {
+                                    let firstFew = String(trimmedLine.prefix(4))
+                                    if trimmedLine.replacingOccurrences(of: firstFew, with: "").isEmpty && firstFew.count > 1 {
+                                        foundGarbage = true
+                                        break
+                                    }
+                                }
+                                
+                                cleanLines.append(line)
+                            }
+                            
+                            if foundGarbage {
+                                cleanedResponse = cleanLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                                print("🧹 Removed garbled text, kept: \(cleanedResponse)")
+                            }
+                            
                             // Remove the user's message if it appears at the beginning
                             if cleanedResponse.hasPrefix(userMessage) {
                                 cleanedResponse = String(cleanedResponse.dropFirst(userMessage.count))
@@ -257,6 +332,10 @@ class CactusManager: ObservableObject {
                             
                             let aiMessage = ChatMessage(id: UUID(), text: cleanedResponse, isUser: false, timestamp: Date())
                             self.addMessage(aiMessage)
+                            
+                            // Trigger TTS callback if available
+                            self.onAIMessageAdded?(cleanedResponse)
+                            
                             cactus_free_completion_result_members_c(&result)
                             completion(true)
                             } else {
