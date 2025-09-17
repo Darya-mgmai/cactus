@@ -1,27 +1,38 @@
 import Foundation
-import Speech
 import AVFoundation
+import Speech
 
-class SpeechManager: NSObject, ObservableObject {
+class SpeechManager: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     // MARK: - Published Properties
-    @Published var isRecording = false
     @Published var isPlaying = false
+    @Published var isRecording = false
     @Published var recordingText = ""
     @Published var hasPermission = false
     
+    // Callback for when recording finishes
+    var onRecordingFinished: ((String) -> Void)?
+    
     // MARK: - Private Properties
+    private let synthesizer = AVSpeechSynthesizer()
     private let audioEngine = AVAudioEngine()
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let synthesizer = AVSpeechSynthesizer()
     
     override init() {
         super.init()
-        synthesizer.delegate = self
         
-        // Delay permission request to avoid crashes during app launch
+        // Initialize synthesizer safely
+        synthesizer.delegate = self
+        print("✅ SpeechManager initialized (TTS + STT)")
+        
+        // Log available voices for debugging
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.logAvailableVoices()
+        }
+        
+        // Request permissions with delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.requestPermissions()
         }
     }
@@ -35,7 +46,6 @@ class SpeechManager: NSObject, ObservableObject {
             return
         }
         
-        // Request speech recognition permission
         SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
             DispatchQueue.main.async {
                 switch authStatus {
@@ -55,10 +65,10 @@ class SpeechManager: NSObject, ObservableObject {
         AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
             DispatchQueue.main.async {
                 self?.hasPermission = granted
-                if granted {
-                    print("✅ Microphone and speech recognition permissions granted")
-                } else {
+                if !granted {
                     print("❌ Microphone permission denied")
+                } else {
+                    print("✅ Microphone permission granted")
                 }
             }
         }
@@ -71,151 +81,223 @@ class SpeechManager: NSObject, ObservableObject {
             return
         }
         
-        guard !isRecording else { return }
+        // Stop any current speech
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+            isPlaying = false
+        }
         
-        // Cancel any ongoing recognition task
-        recognitionTask?.cancel()
-        recognitionTask = nil
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            recognitionRequest?.endAudio()
+            isRecording = false
+            print("🛑 STT: Audio engine stopped, recording ended")
+        }
         
-        // Configure audio session
-        let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement, options: .duckOthers)
+            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+            print("✅ STT: Audio session configured for recording")
         } catch {
-            print("❌ Audio session setup failed: \(error)")
+            print("❌ STT: Audio session setup failed: \(error)")
             return
         }
         
-        // Create recognition request
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         guard let recognitionRequest = recognitionRequest else {
-            print("❌ Unable to create recognition request")
-            return
+            fatalError("Unable to create a SFSpeechAudioBufferRecognitionRequest object")
         }
-        
         recognitionRequest.shouldReportPartialResults = true
         
-        // Get audio input node
-        let inputNode = audioEngine.inputNode
-        
-        // Create recognition task
         recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            DispatchQueue.main.async {
-                if let result = result {
-                    self?.recordingText = result.bestTranscription.formattedString
-                }
+            guard let self = self else { return }
+            var isFinal = false
+            
+            if let result = result {
+                self.recordingText = result.bestTranscription.formattedString
+                isFinal = result.isFinal
+            }
+            
+            if error != nil || isFinal {
+                self.audioEngine.stop()
+                self.audioEngine.inputNode.removeTap(onBus: 0)
+                self.recognitionRequest = nil
+                self.recognitionTask = nil
+                self.isRecording = false
+                print("🛑 STT: Recognition task ended. Final: \(isFinal), Error: \(error?.localizedDescription ?? "None")")
                 
-                if error != nil || result?.isFinal == true {
-                    self?.stopRecording()
+                // If recording stopped and text is available, trigger callback
+                if isFinal && !self.recordingText.isEmpty {
+                    print("🎤 Final recorded text: \(self.recordingText)")
+                    self.onRecordingFinished?(self.recordingText)
                 }
             }
         }
         
-        // Configure audio format
+        let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            recognitionRequest.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { (buffer: AVAudioPCMBuffer, when: AVAudioTime) in
+            self.recognitionRequest?.append(buffer)
         }
         
-        // Start audio engine
         audioEngine.prepare()
         do {
             try audioEngine.start()
             isRecording = true
             recordingText = ""
-            print("🎤 Started recording")
+            print("✅ STT: Audio engine started, recording initiated")
         } catch {
-            print("❌ Audio engine start failed: \(error)")
+            print("❌ STT: Audio engine couldn't start: \(error)")
+            isRecording = false
         }
     }
     
     func stopRecording() {
-        guard isRecording else { return }
-        
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-        
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        
-        isRecording = false
-        print("🛑 Stopped recording")
-        
-        // Reset audio session
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("❌ Failed to reset audio session: \(error)")
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            recognitionRequest?.endAudio()
+            isRecording = false
+            print("🛑 STT: Recording stopped by user")
+            
+            // Call the callback with the recorded text
+            if !recordingText.isEmpty {
+                onRecordingFinished?(recordingText)
+            }
         }
+        // Reset audio session to default
+        resetAudioSession()
+    }
+    
+    // MARK: - Voice Selection
+    private func selectBestVoice() -> AVSpeechSynthesisVoice? {
+        // List of preferred enhanced voices in order of preference
+        let preferredVoices = [
+            "com.apple.voice.enhanced.en-US.Samantha",      // Enhanced Samantha (very natural)
+            "com.apple.voice.enhanced.en-US.Alex",          // Enhanced Alex (natural male)
+            "com.apple.voice.enhanced.en-US.Victoria",      // Enhanced Victoria (natural female)
+            "com.apple.voice.enhanced.en-US.Daniel",        // Enhanced Daniel (natural male)
+            "com.apple.voice.enhanced.en-US.Zoe",           // Enhanced Zoe (natural female)
+            "com.apple.voice.compact.en-US.Samantha",       // Compact Samantha (fallback)
+            "com.apple.voice.compact.en-US.Alex",           // Compact Alex (fallback)
+        ]
+        
+        // Try to find the first available enhanced voice
+        for voiceIdentifier in preferredVoices {
+            if let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
+                print("✅ TTS: Using enhanced voice: \(voice.name)")
+                return voice
+            }
+        }
+        
+        // Fallback to any enhanced voice for English
+        if let enhancedVoice = AVSpeechSynthesisVoice.speechVoices().first(where: { 
+            $0.language.hasPrefix("en") && $0.quality == .enhanced 
+        }) {
+            print("✅ TTS: Using available enhanced voice: \(enhancedVoice.name)")
+            return enhancedVoice
+        }
+        
+        // Final fallback to default voice
+        let defaultVoice = AVSpeechSynthesisVoice(language: "en-US")
+        print("⚠️ TTS: Using default voice: \(defaultVoice?.name ?? "Unknown")")
+        return defaultVoice
+    }
+    
+    // MARK: - Voice Information
+    func getAvailableVoices() -> [AVSpeechSynthesisVoice] {
+        return AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }
+    }
+    
+    func getCurrentVoiceInfo() -> String {
+        if let currentVoice = selectBestVoice() {
+            return "\(currentVoice.name) (\(currentVoice.quality == .enhanced ? "Enhanced" : "Default"))"
+        }
+        return "Unknown Voice"
+    }
+    
+    private func logAvailableVoices() {
+        let voices = getAvailableVoices()
+        print("🎤 Available English voices:")
+        for voice in voices {
+            let quality = voice.quality == .enhanced ? "Enhanced" : "Default"
+            print("  - \(voice.name) (\(quality)) - \(voice.identifier)")
+        }
+        print("🎤 Selected voice: \(getCurrentVoiceInfo())")
     }
     
     // MARK: - Text-to-Speech
     func speak(_ text: String) {
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else { 
+            print("⚠️ TTS: Empty text provided")
+            return 
+        }
+        
+        print("🔊 TTS: Attempting to speak: \(text.prefix(50))...")
         
         // Stop any current speech
         if synthesizer.isSpeaking {
+            print("🛑 TTS: Stopping current speech")
             synthesizer.stopSpeaking(at: .immediate)
         }
         
         // Create utterance
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = 0.5
-        utterance.pitchMultiplier = 1.0
-        utterance.volume = 0.8
         
-        // Configure audio session for playback
+        // Use enhanced voices for more natural sound
+        utterance.voice = selectBestVoice()
+        utterance.rate = 0.52  // Slightly faster for more natural flow
+        utterance.pitchMultiplier = 1.1  // Slightly higher pitch for more natural sound
+        utterance.volume = 0.9  // Higher volume for better clarity
+        
+        // Configure audio session for playback with better error handling
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.allowBluetooth, .allowBluetoothA2DP])
             try AVAudioSession.sharedInstance().setActive(true)
+            print("✅ TTS: Audio session configured successfully")
         } catch {
-            print("❌ Audio session setup for TTS failed: \(error)")
+            print("❌ TTS: Audio session setup failed: \(error)")
+            // Continue anyway - TTS might still work
         }
         
         // Start speaking
         synthesizer.speak(utterance)
         isPlaying = true
-        print("🔊 Started speaking: \(text.prefix(50))...")
+        print("🔊 TTS: Started speaking")
     }
     
     func stopSpeaking() {
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
             isPlaying = false
-            print("🛑 Stopped speaking")
+            print("🛑 TTS: Speaking stopped by user")
         }
-    }
-}
-
-// MARK: - AVSpeechSynthesizerDelegate
-extension SpeechManager: AVSpeechSynthesizerDelegate {
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async {
-            self.isPlaying = true
-        }
+        // Reset audio session to default
+        resetAudioSession()
     }
     
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async {
-            self.isPlaying = false
-        }
-        
-        // Reset audio session
+    private func resetAudioSession() {
         do {
+            try AVAudioSession.sharedInstance().setCategory(.ambient)
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            print("✅ Audio session reset to ambient")
         } catch {
-            print("❌ Failed to reset audio session after TTS: \(error)")
+            print("❌ Failed to reset audio session: \(error)")
+        }
+    }
+    // MARK: - AVSpeechSynthesizerDelegate
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { [weak self] in
+            self?.isPlaying = false
+            print("✅ TTS: Finished speaking")
+            self?.resetAudioSession()
         }
     }
     
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async {
-            self.isPlaying = false
+        DispatchQueue.main.async { [weak self] in
+            self?.isPlaying = false
+            print("🛑 TTS: Speaking cancelled")
+            self?.resetAudioSession()
         }
     }
 }
