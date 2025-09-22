@@ -11,40 +11,22 @@ struct ContentView: View {
     @StateObject private var cactusManager = CactusManager()
     @StateObject private var speechManager = SpeechManager()
     @State private var inputText = ""
-    @State private var showingModelPicker = false
-    @State private var showingSettings = false
     
-    // Custom theme colors
+    // Simple theme colors
     private var accentColor: Color {
-        Color(red: 0.7, green: 0.6, blue: 0.8) // Light purple/lavender
+        Color.red // Red highlights
     }
     
     private var darkBackground: Color {
-        Color(red: 0.2, green: 0.25, blue: 0.3) // Dark blue-gray
+        Color(red: 0.2, green: 0.2, blue: 0.2) // Dark gray background
     }
     
     private var cardBackground: Color {
-        Color(red: 0.25, green: 0.3, blue: 0.35) // Slightly lighter blue-gray
+        Color(red: 0.3, green: 0.3, blue: 0.3) // Slightly lighter gray
     }
     
     var body: some View {
-        TabView {
-            chatView
-                .tabItem {
-                    Image(systemName: "message")
-                        .foregroundColor(accentColor)
-                    Text("Chat")
-                        .foregroundColor(accentColor)
-                }
-            
-            ModelTestView()
-                .tabItem {
-                    Image(systemName: "wrench.and.screwdriver")
-                        .foregroundColor(.gray)
-                    Text("Debug")
-                        .foregroundColor(.gray)
-                }
-        }
+        chatView
     }
     
     private var chatView: some View {
@@ -58,26 +40,8 @@ struct ContentView: View {
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
-                            Text(cactusManager.currentModelName)
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.7))
                         }
                         Spacer()
-                        HStack(spacing: 16) {
-                            Button(action: {
-                                showingSettings = true
-                            }) {
-                                Image(systemName: "slider.horizontal.3")
-                                    .foregroundColor(accentColor)
-                            }
-                            
-                            Button(action: {
-                                showingModelPicker = true
-                            }) {
-                                CompanyLogoView()
-                                    .frame(width: 16, height: 16)
-                            }
-                        }
                     }
                     .padding()
                     
@@ -86,12 +50,10 @@ struct ContentView: View {
                         Circle()
                             .fill(cactusManager.isModelLoaded ? Color.green : Color.red)
                             .frame(width: 8, height: 8)
-                        Text(cactusManager.isModelLoaded ? "Model Ready" : "No Model Loaded")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
                         Spacer()
                     }
                     .padding(.horizontal)
+                    .padding(.top, -16)
                 }
                 .background(darkBackground)
                 
@@ -172,12 +134,6 @@ struct ContentView: View {
             .navigationBarHidden(true)
         }
         .accentColor(accentColor)
-        .sheet(isPresented: $showingModelPicker) {
-            ModelPickerView(cactusManager: cactusManager)
-        }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView(cactusManager: cactusManager)
-        }
         .task {
             cactusManager.initializeCactus()
             
@@ -237,17 +193,17 @@ struct MessageView: View {
     let message: ChatMessage
     @ObservedObject var speechManager: SpeechManager
     
-    // Custom theme colors
+    // Simple theme colors
     private var accentColor: Color {
-        Color(red: 0.7, green: 0.6, blue: 0.8) // Light purple/lavender
+        Color.red // Red highlights
     }
     
     private var darkBackground: Color {
-        Color(red: 0.2, green: 0.25, blue: 0.3) // Dark blue-gray
+        Color(red: 0.2, green: 0.2, blue: 0.2) // Dark gray background
     }
     
     private var cardBackground: Color {
-        Color(red: 0.25, green: 0.3, blue: 0.35) // Slightly lighter blue-gray
+        Color(red: 0.3, green: 0.3, blue: 0.3) // Slightly lighter gray
     }
     
     var body: some View {
@@ -302,17 +258,17 @@ struct ModelPickerView: View {
     @ObservedObject var cactusManager: CactusManager
     @Environment(\.dismiss) private var dismiss
     
-    // Custom theme colors
+    // Simple theme colors
     private var accentColor: Color {
-        Color(red: 0.7, green: 0.6, blue: 0.8) // Light purple/lavender
+        Color.red // Red highlights
     }
     
     private var darkBackground: Color {
-        Color(red: 0.2, green: 0.25, blue: 0.3) // Dark blue-gray
+        Color(red: 0.2, green: 0.2, blue: 0.2) // Dark gray background
     }
     
     private var cardBackground: Color {
-        Color(red: 0.25, green: 0.3, blue: 0.35) // Slightly lighter blue-gray
+        Color(red: 0.3, green: 0.3, blue: 0.3) // Slightly lighter gray
     }
     
     var body: some View {
@@ -370,27 +326,33 @@ struct ModelPickerView: View {
 struct CompanyLogoView: View {
     var body: some View {
         ZStack {
-            // Black rounded square background
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color(red: 0.2, green: 0.25, blue: 0.3))
+            // Black square background
+            Rectangle()
+                .fill(Color.black)
                 .frame(width: 16, height: 16)
+                .cornerRadius(2)
             
-            // Red quarter circle in top-left
-            VStack {
-                HStack {
-                    Circle()
-                        .fill(Color(red: 0.7, green: 0.6, blue: 0.8))
-                        .frame(width: 8, height: 8)
-                        .clipShape(
-                            Rectangle()
-                                .size(width: 4, height: 4)
-                        )
-                        .offset(x: -2, y: -2)
-                    Spacer()
-                }
-                Spacer()
+            // Red three-quarters circle
+            Path { path in
+                let center = CGPoint(x: 8, y: 8)
+                let radius: CGFloat = 5
+                
+                // Start from top of circle
+                path.move(to: CGPoint(x: center.x, y: center.y - radius))
+                
+                // Draw arc from top to left
+                path.addArc(center: center, radius: radius, startAngle: .degrees(-90), endAngle: .degrees(180), clockwise: false)
+                
+                // Draw straight line to bottom
+                path.addLine(to: CGPoint(x: center.x, y: center.y + radius))
+                
+                // Draw arc from bottom to right
+                path.addArc(center: center, radius: radius, startAngle: .degrees(90), endAngle: .degrees(0), clockwise: false)
+                
+                // Close the path
+                path.closeSubpath()
             }
-            .frame(width: 16, height: 16)
+            .fill(Color.red)
         }
     }
 }

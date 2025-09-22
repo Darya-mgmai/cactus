@@ -47,17 +47,18 @@ class CactusManager: ObservableObject {
     }
     
     private func setupAvailableModels() {
-        // Add some example models - in a real app, these would be discovered from the model directory
+        // Set default model
         availableModels = [
-            "Model 1",
             "Model 2"
         ]
+        // Auto-load the default model
+        loadModel("Model 2")
     }
     
     private func addWelcomeMessage() {
         let welcomeMessage = ChatMessage(
             id: UUID(),
-            text: "Welcome to WV Expert Agent! 🤖\n\nTap the gear icon to select a model and configure settings, then start chatting!",
+            text: "Welcome to WV Expert Agent! 🤖\n\nI'm ready to help you! Start chatting by typing a message or using voice input.",
             isUser: false,
             timestamp: Date()
         )
@@ -118,7 +119,6 @@ class CactusManager: ObservableObject {
             return
         }
         
-        addSystemMessage("Loading model: \(modelName)...")
         
         // Wrap model loading in a safe block to prevent crashes
         // Create initialization parameters and ensure proper string handling
@@ -166,7 +166,6 @@ class CactusManager: ObservableObject {
                     self.currentModelName = modelName
                     self.contextSize = "\(self.currentContextSize)"
                     self.modelParameters = "Variable"
-                    self.addSystemMessage("✅ Model loaded successfully!")
                 }
             } else {
                 DispatchQueue.main.async {
@@ -415,7 +414,6 @@ class CactusManager: ObservableObject {
             // Model 2 is Qwen2.5-1.5B-Instruct
             return formatPromptForQwen(history: history, newUserMessage: newUserMessage, modelName: modelName)
         } else {
-            // Model 1 is Gemma3-1B
             return formatPromptForGemma3(history: history, newUserMessage: newUserMessage, modelName: modelName)
         }
     }
@@ -502,9 +500,7 @@ class CactusManager: ObservableObject {
     private func getModelPath(_ modelName: String) -> String? {
         // Handle the display names by mapping to the actual files
         let actualFileName: String
-        if modelName == "Model 1" {
-            actualFileName = "gemma-3-1b-it-q4_k_m.gguf"
-        } else if modelName == "Model 2" {
+        if modelName == "Model 2" {
             actualFileName = "qwen2.5-1.5b-instruct-q8_0.gguf"
         } else {
             actualFileName = modelName
