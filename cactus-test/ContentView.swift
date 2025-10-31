@@ -6,11 +6,16 @@
 //
 
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var cactusManager = CactusManager()
     @StateObject private var speechManager = SpeechManager()
     @State private var inputText = ""
+    @State private var showingDocumentPicker = false
+    @State private var showingPhotoPicker = false
+    @State private var selectedPhoto: PhotosPickerItem?
     
     // Simple theme colors
     private var accentColor: Color {
@@ -36,7 +41,7 @@ struct ContentView: View {
                 VStack {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("WV Expert Agent")
+                            Text("Magma AI")
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
@@ -84,17 +89,38 @@ struct ContentView: View {
                 // Input area
                 VStack(spacing: 8) {
                     HStack {
-                        TextField("Type your message...", text: $inputText, axis: .vertical)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .disabled(cactusManager.isGenerating)
-                        
-                        // Microphone button for speech-to-text
-                        Button(action: toggleRecording) {
-                            Image(systemName: speechManager.isRecording ? "mic.fill" : "mic")
+                        // Plus button for attachments
+                        Menu {
+                            Button(action: { showingPhotoPicker = true }) {
+                                Label("Photo", systemImage: "photo")
+                            }
+                            Button(action: { showingDocumentPicker = true }) {
+                                Label("Document", systemImage: "doc")
+                            }
+                        } label: {
+                            Image(systemName: "plus")
                                 .font(.title2)
-                                .foregroundColor(speechManager.isRecording ? .red : accentColor)
+                                .foregroundColor(accentColor)
                         }
-                        .disabled(cactusManager.isGenerating || !speechManager.hasPermission)
+                        .disabled(cactusManager.isGenerating)
+                        
+                        ZStack(alignment: .trailing) {
+                            TextField("Type your message...", text: $inputText, axis: .vertical)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .disabled(cactusManager.isGenerating)
+                                .padding(.trailing, 40)
+                            
+                            // Mic inside the text field (hidden when typing text)
+                            if inputText.isEmpty {
+                                Button(action: toggleRecording) {
+                                    Image(systemName: speechManager.isRecording ? "mic.fill" : "mic")
+                                        .font(.title3)
+                                        .foregroundColor(speechManager.isRecording ? .red : accentColor)
+                                }
+                                .disabled(cactusManager.isGenerating || !speechManager.hasPermission)
+                                .padding(.trailing, 12)
+                            }
+                        }
                         
                         Button(action: sendMessage) {
                             Image(systemName: cactusManager.isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
@@ -134,6 +160,10 @@ struct ContentView: View {
             .navigationBarHidden(true)
         }
         .accentColor(accentColor)
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .images)
+        .fileImporter(isPresented: $showingDocumentPicker, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
+            handleDocumentSelection(result)
+        }
         .task {
             cactusManager.initializeCactus()
             
@@ -157,6 +187,9 @@ struct ContentView: View {
                     sendMessage()
                 }
             }
+        }
+        .onChange(of: selectedPhoto) { _ in
+            handlePhotoSelection()
         }
     }
     
@@ -185,6 +218,26 @@ struct ContentView: View {
         } else {
             // Clear any existing text and start recording
             speechManager.startRecording()
+        }
+    }
+    
+    // MARK: - Attachment Functions
+    private func handleDocumentSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            if let url = urls.first {
+                print("Selected document: \(url.lastPathComponent)")
+                // TODO: Process the document
+            }
+        case .failure(let error):
+            print("Document selection failed: \(error)")
+        }
+    }
+    
+    private func handlePhotoSelection() {
+        // TODO: Process selected photo
+        if let photo = selectedPhoto {
+            print("Selected photo: \(photo)")
         }
     }
 }

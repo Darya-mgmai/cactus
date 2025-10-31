@@ -170,31 +170,81 @@ class SpeechManager: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     
     // MARK: - Voice Selection
     private func selectBestVoice() -> AVSpeechSynthesisVoice? {
-        // List of preferred enhanced voices in order of preference
+        // Get all available voices for English
+        let allVoices = AVSpeechSynthesisVoice.speechVoices().filter { 
+            $0.language.hasPrefix("en")
+        }
+        
+        // Prioritize premium/neural voices (these are the most natural)
+        // Check for voices with "premium" quality indicators or neural voices
+        if let premiumVoice = allVoices.first(where: { voice in
+            // Look for neural or premium voices - these identifiers may vary
+            voice.identifier.contains("premium") || 
+            voice.identifier.contains("neural") ||
+            voice.name.contains("Premium") ||
+            voice.name.contains("Neural")
+        }) {
+            print("✅ TTS: Using premium/neural voice: \(premiumVoice.name)")
+            return premiumVoice
+        }
+        
+        // Try to find voices by common natural-sounding names
+        let naturalVoiceNames = ["Samantha", "Alex", "Victoria", "Daniel", "Zoe", "Aaron", "Nick", "Fred", "Jill"]
+        for name in naturalVoiceNames {
+            if let voice = allVoices.first(where: { 
+                $0.name.contains(name) && ($0.quality == .enhanced || $0.identifier.contains("enhanced"))
+            }) {
+                print("✅ TTS: Using natural voice: \(voice.name)")
+                return voice
+            }
+        }
+        
+        // List of preferred natural-sounding voices in order of preference
         let preferredVoices = [
-            "com.apple.voice.enhanced.en-US.Samantha",      // Enhanced Samantha (very natural)
-            "com.apple.voice.enhanced.en-US.Alex",          // Enhanced Alex (natural male)
-            "com.apple.voice.enhanced.en-US.Victoria",      // Enhanced Victoria (natural female)
-            "com.apple.voice.enhanced.en-US.Daniel",        // Enhanced Daniel (natural male)
-            "com.apple.voice.enhanced.en-US.Zoe",           // Enhanced Zoe (natural female)
-            "com.apple.voice.compact.en-US.Samantha",       // Compact Samantha (fallback)
-            "com.apple.voice.compact.en-US.Alex",           // Compact Alex (fallback)
+            "com.apple.voice.premium.en-US.Samantha",      // Premium Samantha (most natural)
+            "com.apple.voice.enhanced.en-US.Samantha",      // Enhanced Samantha
+            "com.apple.voice.enhanced.en-US.Alex",          // Enhanced Alex
+            "com.apple.voice.enhanced.en-US.Victoria",      // Enhanced Victoria
+            "com.apple.voice.enhanced.en-US.Daniel",        // Enhanced Daniel
+            "com.apple.voice.enhanced.en-US.Zoe",           // Enhanced Zoe
+            "com.apple.voice.enhanced.en-US.Aaron",         // Enhanced Aaron
+            "com.apple.voice.enhanced.en-US.Nick",          // Enhanced Nick
+            "com.apple.voice.compact.en-US.Samantha",      // Compact Samantha
+            "com.apple.voice.compact.en-US.Alex",          // Compact Alex
         ]
         
-        // Try to find the first available enhanced voice
+        // Try to find the first available preferred voice
         for voiceIdentifier in preferredVoices {
             if let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
-                print("✅ TTS: Using enhanced voice: \(voice.name)")
+                print("✅ TTS: Using preferred voice: \(voice.name)")
                 return voice
             }
         }
         
         // Fallback to any enhanced voice for English
-        if let enhancedVoice = AVSpeechSynthesisVoice.speechVoices().first(where: { 
-            $0.language.hasPrefix("en") && $0.quality == .enhanced 
+        if let enhancedVoice = allVoices.first(where: { 
+            $0.quality == .enhanced 
         }) {
             print("✅ TTS: Using available enhanced voice: \(enhancedVoice.name)")
             return enhancedVoice
+        }
+        
+        // Try to find Samantha or Alex by name (these are typically most natural)
+        if let samantha = allVoices.first(where: { $0.name.contains("Samantha") }) {
+            print("✅ TTS: Using Samantha voice: \(samantha.name)")
+            return samantha
+        }
+        if let alex = allVoices.first(where: { $0.name.contains("Alex") }) {
+            print("✅ TTS: Using Alex voice: \(alex.name)")
+            return alex
+        }
+        
+        // Try to find a compact voice as better fallback
+        if let compactVoice = allVoices.first(where: {
+            $0.quality == .default && $0.identifier.contains("compact")
+        }) {
+            print("✅ TTS: Using compact voice: \(compactVoice.name)")
+            return compactVoice
         }
         
         // Final fallback to default voice
@@ -243,11 +293,13 @@ class SpeechManager: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         // Create utterance
         let utterance = AVSpeechUtterance(string: text)
         
-        // Use enhanced voices for more natural sound
+        // Use best available natural voice
         utterance.voice = selectBestVoice()
-        utterance.rate = 0.52  // Slightly faster for more natural flow
-        utterance.pitchMultiplier = 1.1  // Slightly higher pitch for more natural sound
-        utterance.volume = 0.9  // Higher volume for better clarity
+        
+        // Optimized parameters for most natural, human-like speech
+        utterance.rate = 0.42  // Slower rate for more natural, conversational pace
+        utterance.pitchMultiplier = 0.95  // Slightly lower pitch for more natural, less robotic sound
+        utterance.volume = 1.0  // Full volume for clarity
         
         // Configure audio session for playback with better error handling
         do {

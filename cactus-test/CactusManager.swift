@@ -58,7 +58,7 @@ class CactusManager: ObservableObject {
     private func addWelcomeMessage() {
         let welcomeMessage = ChatMessage(
             id: UUID(),
-            text: "Welcome to WV Expert Agent! 🤖\n\nI'm ready to help you! Start chatting by typing a message or using voice input.",
+            text: "Welcome to Magma AI! 🤖\n\nI'm ready to help you! Start chatting by typing a message or using voice input.",
             isUser: false,
             timestamp: Date()
         )
